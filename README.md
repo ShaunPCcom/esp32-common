@@ -33,6 +33,16 @@ UART-based command-line interface framework:
 - Input parsing and dispatch
 - Consistent CLI experience across projects
 
+### crash_diag
+Crash diagnostics and remote telemetry (pure C):
+- Monotonic boot counter persisted in NVS (`crash_diag` namespace)
+- Reset reason captured via `esp_reset_reason()` at boot
+- Last uptime before reset via `RTC_NOINIT_ATTR` LP RAM (survives software/panic/WDT resets, not power loss)
+- Minimum free heap tracked since boot
+- Call `crash_diag_init()` once in `app_main()` after `nvs_flash_init()`
+- Call `crash_diag_get_data()` during cluster creation to seed ZCL attributes
+- Call `crash_diag_update_uptime()` periodically (e.g. every sensor poll)
+
 ## Integration
 
 ### Method 1: ESP-IDF Component Manager (Recommended)
@@ -48,7 +58,7 @@ dependencies:
     git: https://github.com/ShaunPCcom/esp32-zigbee-common.git
     path: zigbee_core
   # Add other components as needed:
-  # nvs_helpers, cli_framework
+  # nvs_helpers, cli_framework, crash_diag
 ```
 
 Components are automatically downloaded to `managed_components/` during build.
@@ -90,12 +100,15 @@ NvsStore config("my_namespace");
   - Published to GitHub: https://github.com/ShaunPCcom/esp32-zigbee-common
   - In use by: zb-h2-LED-lighting project (v1.1.1+)
   - Integration: ESP-IDF Component Manager
-- **Phase 2+ (future)**: Full migration of LD2450 project, additional shared utilities
+- **Phase 2 (2026-03-07)**: ✅ crash_diag component added (ported from ld2450-zb-h2)
+  - Pure C, no Zigbee dependency, reusable by any ESP32 Zigbee project
+- **Phase 3+ (future)**: Full migration of LD2450 project, additional shared utilities
 
 ## Projects Using This
 
 - **zb-h2-LED-lighting** (v1.1.1+): BoardLed, ButtonHandler via Component Manager
-- **ld2450-zb-h2** (planned): Will use same components for code sharing
+- **ld2450-zb-h2** (v1.1.2+): BoardLed, ButtonHandler via Component Manager; crash_diag (pending migration)
+- **zb-h2-LED-lighting** (pending): crash_diag port in progress
 
 ## License
 

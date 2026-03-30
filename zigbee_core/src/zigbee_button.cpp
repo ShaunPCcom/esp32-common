@@ -20,7 +20,7 @@ ButtonHandler::ButtonHandler(uint8_t gpio, uint32_t network_reset_ms, uint32_t f
         .pull_up_en = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE,
-#if SOC_GPIO_SUPPORT_PIN_HYS_FILTER
+#ifdef CONFIG_IDF_TARGET_ESP32H2
         .hys_ctrl_mode = GPIO_HYS_SOFT_DISABLE,
 #endif
     };

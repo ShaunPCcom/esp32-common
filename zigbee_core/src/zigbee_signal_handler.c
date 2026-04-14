@@ -9,8 +9,14 @@
 
 #include "zigbee_signal_handler.h"
 
-#include "board_led.h"
 #include "esp_log.h"
+
+/* C wrappers for BoardLed (defined in board_led component) */
+extern void board_led_set_state_off(void);
+extern void board_led_set_state_not_joined(void);
+extern void board_led_set_state_pairing(void);
+extern void board_led_set_state_joined(void);
+extern void board_led_set_state_error(void);
 #include "esp_system.h"
 #include "esp_zigbee_core.h"
 #include "freertos/FreeRTOS.h"

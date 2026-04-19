@@ -76,3 +76,30 @@ esp_err_t web_server_base_register(const char *uri, httpd_method_t method,
 
 /** Stop the HTTP server and free the setup page buffer. */
 void web_server_base_stop(void);
+
+/* ========================================================================== */
+/*  Server-Sent Events (SSE)                                                   */
+/* ========================================================================== */
+
+/**
+ * Serializer called once per topic per connected client when a topic's version
+ * changes. Write a JSON document into @p buf; return bytes written (excluding
+ * trailing NUL), or < 0 on error. Runs in the SSE client task context.
+ */
+typedef int (*wsb_sse_serializer_t)(const char *topic, char *buf, size_t buf_len);
+
+/**
+ * Register a streaming endpoint at @p uri. @p topics is a NULL-terminated
+ * array of topic name string literals (e.g. {"segments","config",NULL}).
+ * The serializer is called whenever a topic's version changes. Must be called
+ * after web_server_base_start(). Only one endpoint may be registered.
+ */
+esp_err_t web_server_base_sse_register(const char *uri,
+                                       const char *const *topics,
+                                       wsb_sse_serializer_t serializer);
+
+/**
+ * Bump a topic's version counter and wake all connected SSE clients.
+ * Safe from any task context (not ISR-safe). O(1).
+ */
+void web_server_base_sse_notify(const char *topic);

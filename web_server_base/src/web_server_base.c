@@ -905,3 +905,5 @@ void web_server_base_stop(void)
     s_setup_html = NULL;
     s_cfg = NULL;
 }
+
+httpd_handle_t web_server_base_get_server(void) { return s_server; }

@@ -665,6 +665,7 @@ static esp_err_t handle_post_ota(httpd_req_t *req)
 
     if (ret == ESP_OK) {
         httpd_resp_set_status(req, "202 Accepted");
+        web_server_base_sse_notify("ota");
     } else if (ret == ESP_ERR_INVALID_STATE) {
         httpd_resp_set_status(req, "409 Conflict");
     }

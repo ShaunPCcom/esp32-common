@@ -736,9 +736,10 @@ static esp_err_t handle_post_ota_check(httpd_req_t *req)
     if (plain[0] == 'v') plain++;
 
     cJSON *resp = cJSON_CreateObject();
-    cJSON_AddBoolToObject(resp, "available", ota_check_available());
-    cJSON_AddStringToObject(resp, "current", plain);
-    cJSON_AddStringToObject(resp, "latest",  ota_check_latest_version());
+    cJSON_AddBoolToObject(resp, "available",   ota_check_available());
+    cJSON_AddStringToObject(resp, "current",   plain);
+    cJSON_AddStringToObject(resp, "latest",    ota_check_latest_version());
+    cJSON_AddBoolToObject(resp, "in_progress", zigbee_ota_is_in_progress());
     send_json(req, 200, resp);
     cJSON_Delete(resp);
     return ESP_OK;

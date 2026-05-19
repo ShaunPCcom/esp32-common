@@ -27,44 +27,45 @@ static uint8_t  s_error_code  = PC_ERR_NONE;
 /* chunk_data: ZCL CHAR_STRING — first byte = length, then up to 64 bytes of payload */
 static uint8_t s_chunk_data_zcl[PC_CHUNK_SIZE + 2];
 
-/* ---- Cluster attribute list creation ---- */
+/* ---- Add portable-config attrs to an existing custom cluster attr list ---- */
 
-esp_zb_attribute_list_t *portable_config_create_cluster_attr_list(void)
+esp_err_t portable_config_add_attrs(esp_zb_attribute_list_t *attr_list)
 {
-    esp_zb_attribute_list_t *attrs = esp_zb_zcl_attr_list_create(PC_CLUSTER_ID);
-
-    esp_zb_custom_cluster_add_custom_attr(attrs, PC_ATTR_CHUNK_IDX,
-        ESP_ZB_ZCL_ATTR_TYPE_U16,
-        ESP_ZB_ZCL_ATTR_ACCESS_READ_WRITE,
-        &s_chunk_idx);
+    if (!attr_list) return ESP_ERR_INVALID_ARG;
 
     s_chunk_data_zcl[0] = 0x00;
-    esp_zb_custom_cluster_add_custom_attr(attrs, PC_ATTR_CHUNK_DATA,
+
+    esp_zb_custom_cluster_add_custom_attr(attr_list, PC_ATTR_CHUNK_IDX,
+        ESP_ZB_ZCL_ATTR_TYPE_U16,
+        ESP_ZB_ZCL_ATTR_ACCESS_READ_WRITE | ESP_ZB_ZCL_ATTR_ACCESS_REPORTING,
+        &s_chunk_idx);
+
+    esp_zb_custom_cluster_add_custom_attr(attr_list, PC_ATTR_CHUNK_DATA,
         ESP_ZB_ZCL_ATTR_TYPE_CHAR_STRING,
-        ESP_ZB_ZCL_ATTR_ACCESS_READ_WRITE,
+        ESP_ZB_ZCL_ATTR_ACCESS_READ_WRITE | ESP_ZB_ZCL_ATTR_ACCESS_REPORTING,
         s_chunk_data_zcl);
 
-    esp_zb_custom_cluster_add_custom_attr(attrs, PC_ATTR_CHUNK_COUNT,
+    esp_zb_custom_cluster_add_custom_attr(attr_list, PC_ATTR_CHUNK_COUNT,
         ESP_ZB_ZCL_ATTR_TYPE_U16,
         ESP_ZB_ZCL_ATTR_ACCESS_READ_ONLY | ESP_ZB_ZCL_ATTR_ACCESS_REPORTING,
         &s_chunk_count);
 
-    esp_zb_custom_cluster_add_custom_attr(attrs, PC_ATTR_TRIGGER,
+    esp_zb_custom_cluster_add_custom_attr(attr_list, PC_ATTR_TRIGGER,
         ESP_ZB_ZCL_ATTR_TYPE_U8,
-        ESP_ZB_ZCL_ATTR_ACCESS_WRITE_ONLY,
+        ESP_ZB_ZCL_ATTR_ACCESS_READ_WRITE | ESP_ZB_ZCL_ATTR_ACCESS_REPORTING,
         &s_trigger);
 
-    esp_zb_custom_cluster_add_custom_attr(attrs, PC_ATTR_STATUS,
+    esp_zb_custom_cluster_add_custom_attr(attr_list, PC_ATTR_STATUS,
         ESP_ZB_ZCL_ATTR_TYPE_U8,
         ESP_ZB_ZCL_ATTR_ACCESS_READ_ONLY | ESP_ZB_ZCL_ATTR_ACCESS_REPORTING,
         &s_status);
 
-    esp_zb_custom_cluster_add_custom_attr(attrs, PC_ATTR_ERROR_CODE,
+    esp_zb_custom_cluster_add_custom_attr(attr_list, PC_ATTR_ERROR_CODE,
         ESP_ZB_ZCL_ATTR_TYPE_U8,
         ESP_ZB_ZCL_ATTR_ACCESS_READ_ONLY | ESP_ZB_ZCL_ATTR_ACCESS_REPORTING,
         &s_error_code);
 
-    return attrs;
+    return ESP_OK;
 }
 
 /* ---- Export: update chunk_data ZCL attr for the requested chunk index ---- */

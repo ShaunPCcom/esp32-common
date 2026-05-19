@@ -19,14 +19,14 @@
  *   - All chips: Zigbee custom cluster 0xFC10 (chunked attribute transfer)
  */
 
-/* ---- Zigbee cluster / attribute IDs ---- */
-#define PC_CLUSTER_ID           0xFC10  /* Manufacturer-specific: portable config bundle */
-#define PC_ATTR_CHUNK_IDX       0x0000  /* U16  RW  chunk index for export read / import write  */
-#define PC_ATTR_CHUNK_DATA      0x0001  /* CHAR_STRING RW  64-byte chunk payload               */
-#define PC_ATTR_CHUNK_COUNT     0x0002  /* U16  R+Rep  total chunks in current export buffer    */
-#define PC_ATTR_TRIGGER         0x0003  /* U8   W  1=start_export 2=commit_import 3=abort       */
-#define PC_ATTR_STATUS          0x0004  /* U8   R+Rep  0=idle 1=exporting 2=importing 3=ok 4=err */
-#define PC_ATTR_ERROR_CODE      0x0005  /* U8   R+Rep  see PC_ERR_* constants                  */
+/* ---- Zigbee attribute IDs (added to the project's existing custom cluster) ---- */
+/* Use 0x0100–0x0105 to avoid collisions with LD2450/LED attrs below 0x00FF.    */
+#define PC_ATTR_CHUNK_IDX       0x0100  /* U16  RW  chunk index for export read / import write  */
+#define PC_ATTR_CHUNK_DATA      0x0101  /* CHAR_STRING RW  64-byte chunk payload               */
+#define PC_ATTR_CHUNK_COUNT     0x0102  /* U16  R+Rep  total chunks in current export buffer    */
+#define PC_ATTR_TRIGGER         0x0103  /* U8   W  1=start_export 2=commit_import 3=abort       */
+#define PC_ATTR_STATUS          0x0104  /* U8   R+Rep  0=idle 1=exporting 2=importing 3=ok 4=err */
+#define PC_ATTR_ERROR_CODE      0x0105  /* U8   R+Rep  see PC_ERR_* constants                  */
 
 /* Error codes reported in PC_ATTR_ERROR_CODE */
 #define PC_ERR_NONE             0
@@ -58,6 +58,7 @@ typedef struct {
     const char          *device_tag;      /* e.g. "ld2450" or "led_ctrl" — validated on import */
     uint16_t             schema_version;  /* payload schema version; project-owned             */
     const char          *fw_version;      /* from version.h, informational                     */
+    uint16_t             cluster_id;      /* ZCL cluster hosting the PC attrs (e.g. 0xFC00)   */
     pc_serialize_cb_t    serialize;
     pc_deserialize_cb_t  deserialize;
 } portable_config_init_t;
@@ -75,11 +76,12 @@ esp_err_t portable_config_init(const portable_config_init_t *cfg);
 esp_err_t portable_config_register_http(void);
 
 /**
- * Create the Zigbee attribute list for the portable-config cluster.
- * Add the returned list to EP1 using esp_zb_ep_list_add_ep() with cluster ID PC_CLUSTER_ID.
+ * Add the portable-config attributes to an existing custom cluster attribute list.
+ * Call this after adding all project-specific attrs to the list, before passing
+ * the list to esp_zb_cluster_list_add_custom_cluster().
  * Must be called before esp_zb_device_register().
  */
-esp_zb_attribute_list_t *portable_config_create_cluster_attr_list(void);
+esp_err_t portable_config_add_attrs(esp_zb_attribute_list_t *attr_list);
 
 /**
  * Record which endpoint hosts the portable-config cluster.

@@ -36,9 +36,9 @@ static void set_status(uint8_t status, uint8_t err)
     s.error_code = err;
     /* Update ZCL attribute values so Z2M can read them */
     if (s.initialised && s.endpoint) {
-        esp_zb_zcl_set_attribute_val(s.endpoint, PC_CLUSTER_ID,
+        esp_zb_zcl_set_attribute_val(s.endpoint, s.cluster_id,
             ESP_ZB_ZCL_CLUSTER_SERVER_ROLE, PC_ATTR_STATUS, &s.status, false);
-        esp_zb_zcl_set_attribute_val(s.endpoint, PC_CLUSTER_ID,
+        esp_zb_zcl_set_attribute_val(s.endpoint, s.cluster_id,
             ESP_ZB_ZCL_CLUSTER_SERVER_ROLE, PC_ATTR_ERROR_CODE, &s.error_code, false);
     }
 }
@@ -73,7 +73,8 @@ esp_err_t portable_config_init(const portable_config_init_t *cfg)
         return ESP_ERR_NO_MEM;
     }
 
-    s.cfg = *cfg;
+    s.cfg        = *cfg;
+    s.cluster_id = cfg->cluster_id;
     s.status      = PC_STATUS_IDLE;
     s.error_code  = PC_ERR_NONE;
     s.initialised = true;
@@ -140,7 +141,7 @@ esp_err_t portable_config_do_export(void)
 
     /* Update chunk_count ZCL attribute */
     if (s.endpoint) {
-        esp_zb_zcl_set_attribute_val(s.endpoint, PC_CLUSTER_ID,
+        esp_zb_zcl_set_attribute_val(s.endpoint, s.cluster_id,
             ESP_ZB_ZCL_CLUSTER_SERVER_ROLE, PC_ATTR_CHUNK_COUNT, &s.chunk_count, false);
     }
 

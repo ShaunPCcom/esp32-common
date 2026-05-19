@@ -9,6 +9,7 @@ static const char *TAG = "pc_zb";
 
 /* Internal accessors from portable_config.c */
 extern uint8_t  portable_config_get_ep(void);
+extern uint16_t portable_config_get_cluster_id(void);
 extern uint8_t  portable_config_get_status(void);
 extern const char *portable_config_get_buf(size_t *len_out);
 extern char    *portable_config_get_buf_rw(void);
@@ -79,7 +80,7 @@ static void update_chunk_data_for_export(uint16_t idx)
     const char *buf = portable_config_get_buf(&buf_len);
     if (!buf || buf_len == 0) {
         s_chunk_data_zcl[0] = 0;
-        esp_zb_zcl_set_attribute_val(ep, PC_CLUSTER_ID,
+        esp_zb_zcl_set_attribute_val(ep, portable_config_get_cluster_id(),
             ESP_ZB_ZCL_CLUSTER_SERVER_ROLE, PC_ATTR_CHUNK_DATA, s_chunk_data_zcl, false);
         return;
     }
@@ -94,7 +95,7 @@ static void update_chunk_data_for_export(uint16_t idx)
         memcpy(s_chunk_data_zcl + 1, buf + offset, chunk_len);
     }
 
-    esp_zb_zcl_set_attribute_val(ep, PC_CLUSTER_ID,
+    esp_zb_zcl_set_attribute_val(ep, portable_config_get_cluster_id(),
         ESP_ZB_ZCL_CLUSTER_SERVER_ROLE, PC_ATTR_CHUNK_DATA, s_chunk_data_zcl, false);
 }
 

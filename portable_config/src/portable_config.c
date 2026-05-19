@@ -246,6 +246,11 @@ uint8_t portable_config_get_ep(void)
     return s.endpoint;
 }
 
+uint16_t portable_config_get_cluster_id(void)
+{
+    return s.cluster_id;
+}
+
 void portable_config_reset(void)
 {
     reset_transfer();

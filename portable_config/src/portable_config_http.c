@@ -20,6 +20,11 @@
 
 static const char *TAG = "pc_http";
 
+/* Internal accessors from portable_config.c */
+extern esp_err_t    portable_config_do_export(void);
+extern esp_err_t    portable_config_do_import(const char *json, size_t len);
+extern const char  *portable_config_get_buf(size_t *len_out);
+
 /* ---- Body reader with custom size cap ---- */
 
 static char *read_body_pc(httpd_req_t *req)

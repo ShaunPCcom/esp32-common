@@ -93,6 +93,9 @@ typedef int (*wsb_sse_serializer_t)(const char *topic, char *buf, size_t buf_len
  * array of topic name string literals (e.g. {"segments","config",NULL}).
  * The serializer is called whenever a topic's version changes. Must be called
  * after web_server_base_start(). Only one endpoint may be registered.
+ * An implicit "boot" topic (payload: {"boot_id":"0x..."}) is always appended
+ * to the caller's topic list. Its boot_id changes on every reset, so front-ends
+ * can call location.reload() when the id changes to auto-refresh after reboot.
  */
 esp_err_t web_server_base_sse_register(const char *uri,
                                        const char *const *topics,

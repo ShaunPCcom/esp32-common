@@ -14,10 +14,12 @@
 
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,7 +27,7 @@
 static const char *TAG = "wsb_sse";
 
 #define SSE_MAX_CLIENTS    2
-#define SSE_MAX_TOPICS     8
+#define SSE_MAX_TOPICS     9   /* 8 project topics + 1 implicit "boot" */
 #define SSE_BUF_SIZE       4096
 #define SSE_KEEPALIVE_MS   15000
 #define SSE_TASK_STACK     4096
@@ -59,6 +61,11 @@ static bool           s_registered  = false;
 static wsb_client_t   s_clients[SSE_MAX_CLIENTS];
 static SemaphoreHandle_t s_client_mutex;
 static bool           s_init_done   = false;
+
+/* Boot-ID state — injected as an implicit "boot" topic */
+static char                  s_boot_id_str[12];             /* "0xXXXXXXXX" + NUL */
+static wsb_sse_serializer_t  s_user_serializer;
+static const char           *s_topics_storage[SSE_MAX_TOPICS]; /* caller's topics + "boot" + NULL */
 
 /* ================================================================== */
 /*  SSE framing                                                        */
@@ -209,9 +216,19 @@ static esp_err_t handle_sse(httpd_req_t *req)
 /*  Public API                                                         */
 /* ================================================================== */
 
+static int builtin_serializer(const char *topic, char *buf, size_t buf_len)
+{
+    if (strcmp(topic, "boot") == 0) {
+        int n = snprintf(buf, buf_len, "{\"boot_id\":\"%s\"}", s_boot_id_str);
+        return (n > 0 && (size_t)n < buf_len) ? n : -1;
+    }
+    return s_user_serializer ? s_user_serializer(topic, buf, buf_len) : -1;
+}
+
 static void ensure_init(void)
 {
     if (s_init_done) return;
+    snprintf(s_boot_id_str, sizeof(s_boot_id_str), "0x%08" PRIx32, esp_random());
     s_ep.mutex      = xSemaphoreCreateMutex();
     s_client_mutex  = xSemaphoreCreateMutex();
     s_init_done     = true;
@@ -227,15 +244,21 @@ esp_err_t web_server_base_sse_register(const char *uri,
 
     ensure_init();
 
-    /* Count topics */
+    /* Build augmented topic list: caller's topics + implicit "boot" */
     int count = 0;
-    while (topics[count] && count < SSE_MAX_TOPICS) count++;
+    while (topics[count] && count < SSE_MAX_TOPICS - 2) {
+        s_topics_storage[count] = topics[count];
+        count++;
+    }
+    s_topics_storage[count++] = "boot";
+    s_topics_storage[count]   = NULL;
 
-    s_ep.topics      = topics;
-    s_ep.topic_count = count;
-    s_ep.serializer  = serializer;
+    s_user_serializer    = serializer;
+    s_ep.topics          = s_topics_storage;
+    s_ep.topic_count     = count;
+    s_ep.serializer      = builtin_serializer;
     memset(s_ep.versions, 0, sizeof(s_ep.versions));
-    s_registered     = true;
+    s_registered         = true;
 
     httpd_uri_t h = {
         .uri     = uri,

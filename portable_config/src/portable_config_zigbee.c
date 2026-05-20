@@ -99,6 +99,19 @@ static void update_chunk_data_for_export(uint16_t idx)
         ESP_ZB_ZCL_CLUSTER_SERVER_ROLE, PC_ATTR_CHUNK_DATA, s_chunk_data_zcl, false);
 }
 
+/* ---- Deferred import callback (runs on next ZBoss tick, after attr write returns) ---- */
+
+/* Commit import is deferred out of the attribute write callback because the project's
+ * deserialize callback (config_api_apply_all) may issue blocking UART commands and call
+ * multiple Zigbee stack functions (esp_zb_zcl_set_attribute_val, esp_zb_scheduler_alarm).
+ * Running all of that inline inside a ZBoss attribute write callback exceeds ZBoss's
+ * expected callback duration and causes zb_scheduler.c assertion failures. */
+static void deferred_commit_import_cb(uint8_t param)
+{
+    (void)param;
+    portable_config_commit_import();
+}
+
 /* ---- Attribute write handler (called from project's zigbee_attr_handler.c) ---- */
 
 esp_err_t portable_config_handle_attr_write(uint16_t attr_id, void *val)
@@ -142,7 +155,10 @@ esp_err_t portable_config_handle_attr_write(uint16_t attr_id, void *val)
         ESP_LOGI(TAG, "trigger=%u", trig);
         switch (trig) {
         case 1: return portable_config_do_export();
-        case 2: return portable_config_commit_import();
+        case 2:
+            /* Defer to next ZBoss tick — the deserialize callback is too heavy for inline execution */
+            esp_zb_scheduler_alarm(deferred_commit_import_cb, 0, 0);
+            return ESP_OK;
         case 3: portable_config_reset(); return ESP_OK;
         default:
             ESP_LOGW(TAG, "unknown trigger %u", trig);

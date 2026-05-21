@@ -51,7 +51,9 @@
 /** Produces the device-specific payload cJSON object (caller owns it). */
 typedef esp_err_t (*pc_serialize_cb_t)(cJSON **out);
 
-/** Applies a device-specific payload cJSON object. Called from Zigbee task. */
+/** Applies a device-specific payload cJSON object. Called from the httpd task
+ *  (HTTP restore) or a dedicated worker task (Zigbee restore). Free to do
+ *  blocking UART, NVS, and coordinator_fallback calls. */
 typedef esp_err_t (*pc_deserialize_cb_t)(const cJSON *payload);
 
 typedef struct {

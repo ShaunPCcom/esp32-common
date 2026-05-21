@@ -3,6 +3,8 @@
 
 #include "esp_log.h"
 #include "esp_zigbee_core.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <string.h>
 
 static const char *TAG = "pc_zb";
@@ -101,15 +103,23 @@ static void update_chunk_data_for_export(uint16_t idx)
 
 /* ---- Deferred import callback (runs on next ZBoss tick, after attr write returns) ---- */
 
-/* Commit import is deferred out of the attribute write callback because the project's
- * deserialize callback (config_api_apply_all) may issue blocking UART commands and call
- * multiple Zigbee stack functions (esp_zb_zcl_set_attribute_val, esp_zb_scheduler_alarm).
- * Running all of that inline inside a ZBoss attribute write callback exceeds ZBoss's
- * expected callback duration and causes zb_scheduler.c assertion failures. */
+/* The deserialize callback may issue blocking UART commands (ld2450_cmd_*) and call
+ * coordinator_fallback functions that internally update ZCL attributes — neither is
+ * safe on the ZBoss main loop. A scheduler alarm already moves us off the attr-write
+ * callback, but the alarm still fires on the ZBoss task. Spawn a short-lived worker
+ * task so the actual apply runs on a plain FreeRTOS task with no ZBoss constraints. */
+static void pc_restore_worker(void *arg)
+{
+    (void)arg;
+    portable_config_commit_import();
+    vTaskDelete(NULL);
+}
+
 static void deferred_commit_import_cb(uint8_t param)
 {
     (void)param;
-    portable_config_commit_import();
+    xTaskCreate(pc_restore_worker, "pc_restore", 6144, NULL,
+                tskIDLE_PRIORITY + 1, NULL);
 }
 
 /* ---- Attribute write handler (called from project's zigbee_attr_handler.c) ---- */

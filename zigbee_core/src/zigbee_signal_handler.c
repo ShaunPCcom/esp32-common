@@ -90,6 +90,21 @@ void zigbee_full_factory_reset(void)
         ESP_LOGW(TAG, "Full factory reset: no NVS namespace registered, skipping erase");
     }
 
+#if CONFIG_IDF_TARGET_ESP32C6
+    /* Clear WiFi credentials so the device returns to AP provisioning mode.
+     * Namespace must match WIFI_NVS_NAMESPACE in wifi_manager.c. Erased
+     * directly to avoid a zigbee_core → wifi_manager component dependency. */
+    {
+        nvs_handle_t h;
+        if (nvs_open("wifi_cfg", NVS_READWRITE, &h) == ESP_OK) {
+            nvs_erase_all(h);
+            nvs_commit(h);
+            nvs_close(h);
+            ESP_LOGI(TAG, "WiFi credentials erased");
+        }
+    }
+#endif
+
     esp_zb_factory_reset();
     vTaskDelay(pdMS_TO_TICKS(1000));
     esp_restart();

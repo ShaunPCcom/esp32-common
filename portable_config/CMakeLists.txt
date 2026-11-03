@@ -1,4 +1,4 @@
-set(PC_REQUIRES espressif__esp-zigbee-lib json nvs_flash esp_timer)
+set(PC_REQUIRES espressif__esp-zigbee-lib nvs_flash esp_timer)
 
 if("${IDF_TARGET}" STREQUAL "esp32c6")
     list(APPEND PC_REQUIRES web_server_base esp_http_server)

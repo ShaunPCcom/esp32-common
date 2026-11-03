@@ -60,8 +60,6 @@ BoardLed::BoardLed(uint8_t gpio)
         .flags = {
             .invert_out = false,
             .with_dma = false,
-            .io_loop_back = false,
-            .io_od_mode = false,
             .allow_pd = false,
             .init_level = 0,
         },

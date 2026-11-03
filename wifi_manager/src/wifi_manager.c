@@ -9,6 +9,7 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/timers.h"
 #include "lwip/err.h"
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
@@ -28,7 +29,8 @@ static const char *TAG = "wifi_mgr";
 
 /* AP defaults */
 #define WIFI_AP_MAX_CONN    4
-#define WIFI_STA_MAX_RETRY  5
+#define WIFI_STA_FAST_RETRY 5        /* immediate reconnect attempts */
+#define WIFI_STA_BACKOFF_MS 30000    /* then retry every 30s, forever */
 
 /* Captive DNS */
 #define DNS_PORT        53
@@ -36,6 +38,8 @@ static const char *TAG = "wifi_mgr";
 
 static volatile wifi_mgr_state_t s_state = WIFI_MGR_STATE_INIT;
 static int s_retry_count = 0;
+static TimerHandle_t s_retry_timer = NULL;
+static bool s_ap_locked = false;
 static esp_netif_t *s_netif_ap  = NULL;
 static esp_netif_t *s_netif_sta = NULL;
 static char s_hostname_prefix[16] = "device";
@@ -243,6 +247,18 @@ static void captive_dns_task(void *arg)
 }
 
 /* ================================================================== */
+/*  STA backoff reconnect                                              */
+/* ================================================================== */
+
+static void retry_timer_cb(TimerHandle_t t)
+{
+    (void)t;
+    if (s_state == WIFI_MGR_STATE_STA_CONNECTING) {
+        esp_wifi_connect();
+    }
+}
+
+/* ================================================================== */
 /*  WiFi event handler                                                 */
 /* ================================================================== */
 
@@ -266,16 +282,19 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                 break; /* not in STA mode, ignore */
             }
             wifi_event_sta_disconnected_t *d = (wifi_event_sta_disconnected_t *)event_data;
-            ESP_LOGW(TAG, "STA disconnected (reason %u), retry %d/%d",
-                     d->reason, s_retry_count + 1, WIFI_STA_MAX_RETRY);
-            if (s_retry_count < WIFI_STA_MAX_RETRY) {
+            s_state = WIFI_MGR_STATE_STA_CONNECTING;
+            /* Never fall back to AP: softAP + 802.15.4 coex is unstable and
+             * Zigbee may be running. Retry fast a few times, then back off so
+             * the shared radio is mostly free for Zigbee. */
+            if (s_retry_count < WIFI_STA_FAST_RETRY) {
                 s_retry_count++;
+                ESP_LOGW(TAG, "STA disconnected (reason %u), retry %d/%d",
+                         d->reason, s_retry_count, WIFI_STA_FAST_RETRY);
                 esp_wifi_connect();
             } else {
-                ESP_LOGE(TAG, "STA failed after %d retries — falling back to AP mode", WIFI_STA_MAX_RETRY);
-                s_state = WIFI_MGR_STATE_STA_FAILED;
-                esp_wifi_stop();
-                wifi_manager_start();
+                ESP_LOGW(TAG, "STA disconnected (reason %u), retrying in %ds",
+                         d->reason, WIFI_STA_BACKOFF_MS / 1000);
+                xTimerStart(s_retry_timer, 0);
             }
             break;
         }
@@ -326,6 +345,11 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 
 static void start_ap_mode(void)
 {
+    if (s_ap_locked) {
+        ESP_LOGE(TAG, "AP mode refused — locked (Zigbee active; softAP/802.15.4 coex unsupported)");
+        return;
+    }
+
     /* Build SSID from last 3 bytes of MAC */
     uint8_t mac[6];
     esp_wifi_get_mac(WIFI_IF_AP, mac);
@@ -412,6 +436,9 @@ void wifi_manager_init(const char *hostname_prefix)
     esp_coex_wifi_i154_enable();
 #endif
 
+    s_retry_timer = xTimerCreate("wifi_retry", pdMS_TO_TICKS(WIFI_STA_BACKOFF_MS),
+                                 pdFALSE, NULL, retry_timer_cb);
+
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
@@ -428,11 +455,6 @@ void wifi_manager_start(void)
     char ssid[33] = {};
     char pass[65] = {};
 
-    if (s_state == WIFI_MGR_STATE_STA_FAILED) {
-        start_ap_mode();
-        return;
-    }
-
     if (load_credentials(ssid, sizeof(ssid), pass, sizeof(pass))) {
         ESP_LOGI(TAG, "Found stored credentials for \"%s\"", ssid);
         start_sta_mode(ssid, pass);
@@ -440,6 +462,11 @@ void wifi_manager_start(void)
         ESP_LOGI(TAG, "No WiFi credentials stored");
         start_ap_mode();
     }
+}
+
+void wifi_manager_set_ap_locked(bool locked)
+{
+    s_ap_locked = locked;
 }
 
 wifi_mgr_state_t wifi_manager_get_state(void)

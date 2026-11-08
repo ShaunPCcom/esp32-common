@@ -52,7 +52,6 @@ typedef struct {
     wsb_ep_t      *ep;
     httpd_req_t   *req;       /* async req handle — valid while alive */
     TaskHandle_t   task;
-    int            fd;        /* socket fd, for LRU-guard lookup */
     uint32_t       last_seen[SSE_MAX_TOPICS];
     bool           alive;
 } wsb_client_t;
@@ -161,19 +160,6 @@ done:
     vTaskDelete(NULL);
 }
 
-/* Internal — used by the LRU guard in web_server_base.c */
-bool wsb_sse_is_client_fd(int fd)
-{
-    if (!s_init_done) return false;
-    bool found = false;
-    xSemaphoreTake(s_client_mutex, portMAX_DELAY);
-    for (int i = 0; i < SSE_MAX_CLIENTS; i++) {
-        if (s_clients[i].alive && s_clients[i].fd == fd) { found = true; break; }
-    }
-    xSemaphoreGive(s_client_mutex);
-    return found;
-}
-
 /* ================================================================== */
 /*  URI handler — GET /api/events                                     */
 /* ================================================================== */
@@ -209,7 +195,6 @@ static esp_err_t handle_sse(httpd_req_t *req)
     memset(c, 0, sizeof(*c));
     c->ep    = &s_ep;
     c->req   = async_req;
-    c->fd    = httpd_req_to_sockfd(async_req);
     c->alive = true;
     xSemaphoreGive(s_client_mutex);
 

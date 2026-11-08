@@ -15,7 +15,6 @@
 #include "nvs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/timers.h"
 #ifdef CONFIG_IDF_TARGET_ESP32C6
 extern esp_err_t ota_upload_transport_flash(httpd_req_t *req);
 #endif
@@ -31,50 +30,6 @@ static const web_server_base_config_t *s_cfg = NULL;
 static char *s_setup_html = NULL;
 
 #define MAX_BODY_LEN 4096
-
-/* ================================================================== */
-/*  LRU guard — keep WS + SSE sockets from being purged                */
-/*                                                                    */
-/*  httpd only refreshes a session's LRU counter on *received* data.   */
-/*  The browser never sends on the WS/SSE streams, so with            */
-/*  lru_purge_enable they always look least-recently-used and get      */
-/*  evicted whenever the socket table fills. Touch them periodically   */
-/*  (from the httpd task, via httpd_queue_work) so idle keep-alive     */
-/*  sockets are evicted first instead.                                 */
-/* ================================================================== */
-
-#define LRU_GUARD_PERIOD_MS 1000
-#define LRU_GUARD_MAX_FDS   16
-
-extern bool wsb_sse_is_client_fd(int fd);
-static TimerHandle_t s_lru_timer = NULL;
-
-static void lru_guard_work(void *arg)
-{
-    (void)arg;
-    httpd_handle_t srv = s_server;
-    if (!srv) return;
-
-    int fds[LRU_GUARD_MAX_FDS];
-    size_t n = LRU_GUARD_MAX_FDS;
-    if (httpd_get_client_list(srv, &n, fds) != ESP_OK) return;
-
-    for (size_t i = 0; i < n; i++) {
-        bool stream = wsb_sse_is_client_fd(fds[i]);
-#if CONFIG_HTTPD_WS_SUPPORT
-        if (!stream) {
-            stream = (httpd_ws_get_fd_info(srv, fds[i]) == HTTPD_WS_CLIENT_WEBSOCKET);
-        }
-#endif
-        if (stream) httpd_sess_update_lru_counter(srv, fds[i]);
-    }
-}
-
-static void lru_guard_timer_cb(TimerHandle_t t)
-{
-    (void)t;
-    if (s_server) httpd_queue_work(s_server, lru_guard_work, NULL);
-}
 
 /* ================================================================== */
 /*  Setup page template (served in AP mode, before SPIFFS UI is ready) */
@@ -876,7 +831,6 @@ esp_err_t web_server_base_start(const web_server_base_config_t *cfg)
     hcfg.lru_purge_enable  = true;
     hcfg.stack_size        = 8192;
     hcfg.max_uri_handlers  = 40;  /* base uses ~23; leaves room for device-specific */
-    hcfg.max_open_sockets  = 10;  /* WS + SSE are permanent; leave room for browser keep-alives */
 
     esp_err_t err = httpd_start(&s_server, &hcfg);
     if (err != ESP_OK) {
@@ -918,12 +872,6 @@ esp_err_t web_server_base_start(const web_server_base_config_t *cfg)
 
     httpd_register_err_handler(s_server, HTTPD_404_NOT_FOUND, handle_not_found);
 
-    if (!s_lru_timer) {
-        s_lru_timer = xTimerCreate("wsb_lru", pdMS_TO_TICKS(LRU_GUARD_PERIOD_MS),
-                                   pdTRUE, NULL, lru_guard_timer_cb);
-    }
-    if (s_lru_timer) xTimerStart(s_lru_timer, 0);
-
     /* Start background OTA check (first check fires 15 s after init) */
     ota_check_config_t ota_cfg = {
         .image_type      = cfg->ota_image_type,
@@ -952,7 +900,6 @@ esp_err_t web_server_base_register(const char *uri, httpd_method_t method,
 
 void web_server_base_stop(void)
 {
-    if (s_lru_timer) xTimerStop(s_lru_timer, portMAX_DELAY);
     if (s_server) {
         httpd_stop(s_server);
         s_server = NULL;
